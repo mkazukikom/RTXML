@@ -173,6 +173,125 @@ print(filepath)
 print('')
 print('')
 
+# simple Linear Regression
+def LinearKFold(k=k):
+    from sklearn.linear_model import LinearRegression
+
+    print('')
+    print('■ Linear model')
+    print('')
+
+    # df = pd.read_csv(str(path_in))
+    x = df.iloc[:, :-1].values
+    t = df.iloc[:, -1].values
+
+    kf = KFold(n_splits=k, shuffle=True, random_state=random_state)
+    lr = LinearRegression()
+
+    aucs = []
+    r2s = []
+    accs = []
+    precs = []
+    recs = []
+    f1s = []
+
+    for train_index, test_index in kf.split(x):
+        x_train, x_test = x[train_index], x[test_index]
+        t_train, t_test = t[train_index], t[test_index]
+
+        lr.fit(x_train, t_train)
+        predictions = lr.predict(x_test)
+
+        # Assuming the task is a regression with binary targets; adjust accordingly
+        predictions_round = [1 if p >= 0.5 else 0 for p in predictions]
+
+        auc = roc_auc_score(t_test, predictions)
+        # r2 = r2_score(t_test, predictions)
+        acc = accuracy_score(t_test, predictions_round)
+        prec = precision_score(t_test, predictions_round)
+        rec = recall_score(t_test, predictions_round)
+        f1 = f1_score(t_test, predictions_round)
+
+        aucs.append(auc)
+        # r2s.append(r2)
+        accs.append(acc)
+        precs.append(prec)
+        recs.append(rec)
+        f1s.append(f1)
+
+    # Calculate mean scores
+    mean_auc = np.mean(aucs)
+    # mean_r2 = np.mean(r2s)
+    mean_acc = np.mean(accs)
+    mean_prec = np.mean(precs)
+    mean_rec = np.mean(recs)
+    mean_f1 = np.mean(f1s)
+
+    # Retrain the model on the full dataset
+    model_full = LinearRegression()
+    model_full.fit(x, t)
+
+    # Extracting feature importances (coefficients in this case)
+    feature_importances = model_full.coef_
+    column_names = df.columns[:-1]
+    feature_importances_df = pd.DataFrame({'Feature': column_names, 'Importance': feature_importances})
+
+    # Sort by absolute values of feature importances for both export and identification of top features
+    # feature_importances_df_sorted = feature_importances_df.assign(Abs_Importance=feature_importances_df['Importance'].abs())\
+    #                                                     .sort_values(by='Abs_Importance', ascending=False)\
+    #                                                     .drop('Abs_Importance', axis=1)
+
+    # Sorting by absolute values for export
+    feature_importances_df['Abs_Importance'] = feature_importances_df['Importance'].abs()
+    feature_importances_df = feature_importances_df.sort_values(by='Abs_Importance', ascending=False).drop('Abs_Importance', axis=1)
+
+    # os.makedirs(path_out, exist_ok=True)
+    excel_filename = os.path.join(path_out, 'feature_importances_linear_kfold.xlsx')
+    feature_importances_df.to_excel(excel_filename, index=False)
+
+    # print('')
+    # print('◆　Coefficients of Linear model are exported as feature_importances_linear_kfold.xlsx')
+    # print('')
+
+    # Sort the features by their importances
+    importance_sorted_idx = np.argsort(np.abs(feature_importances))[::-1]
+    top_idxs = importance_sorted_idx[:10]
+
+    print(f'□ {k}-fold Cross Validation を用いた Simple Linear Regression による2値分類の検定結果')
+    print('')
+    print(f'Mean AUC: {mean_auc:.4f}')
+    # print(f'Mean R2: {mean_r2}')
+    print(f'Mean Accuracy: {mean_acc:.4f}')
+    print(f'Mean Precision: {mean_prec:.4f}')
+    print(f'Mean Recall: {mean_rec:.4f}')
+    print(f'Mean F1 Score: {mean_f1:.4f}')
+    print('')
+
+    print('')
+    print('◇ Linear Regression model の 係数による Feature Importance')
+    print('')
+
+    # Plotting
+    plt.figure(figsize=(size_x, size_y))
+    plt.barh(range(len(top_idxs)), feature_importances[top_idxs], align='center')
+    plt.yticks(range(len(top_idxs)), [column_names[i] for i in top_idxs])
+    plt.xlabel('Feature Importance')
+    plt.title(f'Top 10 Feature Importances in {k}-fold CV of Linear Regression')
+    plt.gca().invert_yaxis()  # Invert y-axis to have the feature with highest importance at the top
+    plt.show()
+
+    # Saving the model
+    os.makedirs(path_model, exist_ok=True)
+    model_filename = os.path.join(path_model, 'kFCV_linear_model.pkl')
+
+    with open(model_filename, 'wb') as file:
+        pickle.dump(model_full, file)
+
+    res = np.array([mean_auc, mean_acc, mean_prec, mean_rec, mean_f1], dtype=object)
+    res2=pd.DataFrame([res], columns=['AUC','Accuracy','Precision','Recall','f1-score'], index=['Linear Regression'])
+
+    return res2
+    
 # Lasso Regression
 def LassoKFold(alpha_value=1.0, k=k):
     from sklearn.linear_model import Lasso
@@ -378,9 +497,6 @@ def simpleLassoKFold(alpha_value, k=k):
 
     return res2
 
-
-
-
 # Lasso Optimized with Optuna
 from sklearn.linear_model import Lasso
 from sklearn.metrics import mean_squared_error
@@ -531,11 +647,7 @@ def LassoKFoldOptuna(k=k):
         pickle.dump(best_model, file)
 
     return res
-
-
-
-
-
+    
 # Ridge Regression
 def RidgeKFold(alpha_value=1.0, k=k):
     from sklearn.linear_model import Ridge
@@ -666,8 +778,6 @@ def RidgeKFold(alpha_value=1.0, k=k):
 
     return res2
 
-
-
 # simple Ridge Regression
 def simpleRidgeKFold(alpha_value, k=k):
     from sklearn.linear_model import Ridge
@@ -736,8 +846,6 @@ def simpleRidgeKFold(alpha_value, k=k):
     res2=pd.DataFrame([res], columns=['AUC','Accuracy','Precision','Recall','f1-score'], index=[f'Ridge Regression with Optuna'])
 
     return res2
-
-
 
 # Ridge Optimized with Optuna
 from sklearn.linear_model import Ridge
@@ -853,6 +961,245 @@ def RidgeKFoldOptuna(k=k):
 
     return res
 
+
+# Logistic Normalized
+def LogisticKFoldNormalized(k=k):
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.metrics import roc_auc_score
+    from sklearn.preprocessing import MinMaxScaler
+
+    print('')
+    print('■ Logistic Regression model (normalized)')
+    print('')
+
+    # Load your dataset
+    # df = pd.read_csv(str(path_in))
+    X = df.iloc[:, :-1].values
+    y = df.iloc[:, -1].values
+
+    # Initialize MinMaxScaler
+    scaler = MinMaxScaler()
+    X_scaled = scaler.fit_transform(X)
+
+    # KFold cross-validation
+    kf = KFold(n_splits=k, shuffle=True, random_state=random_state)
+
+    auc_scores, accuracy_scores, precision_scores, recall_scores, f1_scores = [], [], [], [], []
+
+    # Initialize array to store feature importances
+    feature_importances = np.zeros((df.shape[1] - 1,))
+
+    for train_index, test_index in kf.split(X_scaled):
+        X_train, X_test = X_scaled[train_index], X_scaled[test_index]
+        y_train, y_test = y[train_index], y[test_index]
+
+        # Initialize the Logistic Regression model
+        model = LogisticRegression(random_state=random_state)
+        model.fit(X_train, y_train)
+
+        # Add up the absolute values of the coefficients for each feature
+        feature_importances += np.abs(model.coef_[0])
+
+        # Predict classes and probabilities for evaluation
+        y_pred = model.predict(X_test)
+        y_pred_prob = model.predict_proba(X_test)[:, 1]
+
+        # Compute metrics for the current fold
+        auc = roc_auc_score(y_test, y_pred_prob)
+        accuracy = accuracy_score(y_test, y_pred)
+        precision = precision_score(y_test, y_pred, zero_division=0)
+        recall = recall_score(y_test, y_pred)
+        f1 = f1_score(y_test, y_pred)
+
+        # Append scores
+        auc_scores.append(auc)
+        accuracy_scores.append(accuracy)
+        precision_scores.append(precision)
+        recall_scores.append(recall)
+        f1_scores.append(f1)
+
+        # Calculate mean scores
+        mean_auc = np.mean(auc_scores)
+        mean_acc = np.mean(accuracy_scores)
+        mean_prec = np.mean(precision_scores)
+        mean_rec = np.mean(recall_scores)
+        mean_f1 = np.mean(f1_scores)
+
+    # Calculate and print the mean of each metric
+    print(f'□ {k}-fold Cross Validation を用いた Logistic Regression with Normalization による2値分類の検定結果')
+    print('')
+    print(f'Mean AUC: {np.mean(auc_scores):.4f}')
+    print(f'Mean Accuracy: {np.mean(accuracy_scores):.4f}')
+    print(f'Mean Precision: {np.mean(precision_scores):.4f}')
+    print(f'Mean Recall: {np.mean(recall_scores):.4f}')
+    print(f'Mean F1 Score: {np.mean(f1_scores):.4f}')
+    print('')
+
+
+    # Average the feature importances over all folds
+    feature_importances /= k
+    # Get the feature names
+    feature_names = df.columns[:-1]
+    # Sort the features by importance
+    sorted_idx = np.argsort(feature_importances)[-10:]
+    sorted_importance = feature_importances[sorted_idx]
+    sorted_features = feature_names[sorted_idx]
+
+    # Export feature importances
+    feature_importances_df = pd.DataFrame({'Feature': feature_names, 'Importance': feature_importances})
+    # Sorting by absolute values for export
+    feature_importances_df['Abs_Importance'] = feature_importances_df['Importance'].abs()
+    feature_importances_df = feature_importances_df.sort_values(by='Abs_Importance', ascending=False).drop('Abs_Importance', axis=1)
+    excel_filename = os.path.join(path_out, 'feature_importances_logistic_normalized_kfold.xlsx')
+    feature_importances_df.to_excel(excel_filename, index=False)
+
+
+    print('')
+    print(f'◇ {k}-fold Cross Validation で得られた Logistic regression normalized における Feature Importance')
+    print('')
+    # Plot
+    plt.figure(figsize=(size_x, size_y))
+    plt.barh(sorted_features, sorted_importance, color='skyblue')
+    plt.xlabel('Average Feature Importance')
+    plt.title(f'Top 10 Feature Importances in {k}-fold CV of Logistic Regression normalized')
+    plt.show()
+
+
+    # Optionally retrain the model on the full dataset
+    model_full = LogisticRegression(random_state=random_state)
+    model_full.fit(X_scaled, y)
+
+    # Ensure the path exists
+    os.makedirs(path_model, exist_ok=True)
+    model_filename = os.path.join(path_model, 'kFCV_logistic_normalized.pkl')
+    # Save the full model
+    with open(model_filename, 'wb') as file:
+        pickle.dump(model_full, file)
+
+    res = np.array([mean_auc, mean_acc, mean_prec, mean_rec, mean_f1], dtype=object)
+    res2=pd.DataFrame([res], columns=['AUC','Accuracy','Precision','Recall','f1-score'], index=['Logistic Regression normalized'])
+
+    return res2
+
+
+
+
+
+# Logistic Regression with standadization
+def LogisticKFoldStandardized(k=k):
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.preprocessing import StandardScaler
+
+    print('')
+    print('■ Logistic Regression model (standardized)')
+    print('')
+
+    # Load your dataset
+    # df = pd.read_csv(str(path_in))
+    X = df.iloc[:, :-1].values
+    y = df.iloc[:, -1].values
+
+    # Initialize StandardScaler
+    scaler = StandardScaler()
+    X_standardized = scaler.fit_transform(X)
+
+    # KFold cross-validation
+    kf = KFold(n_splits=k, shuffle=True, random_state=random_state)
+
+    # Initialize array to store feature importances
+    feature_importances = np.zeros((df.shape[1] - 1,))
+
+    auc_scores, accuracy_scores, precision_scores, recall_scores, f1_scores = [], [], [], [], []
+
+    for train_index, test_index in kf.split(X_standardized):
+        X_train, X_test = X_standardized[train_index], X_standardized[test_index]
+        y_train, y_test = y[train_index], y[test_index]
+
+        # Initialize the Logistic Regression model
+        model = LogisticRegression(random_state=random_state)
+        model.fit(X_train, y_train)
+
+        # Add up the absolute values of the coefficients for each feature
+        feature_importances += np.abs(model.coef_[0])
+
+        # Predict classes and probabilities for evaluation
+        y_pred = model.predict(X_test)
+        y_pred_prob = model.predict_proba(X_test)[:, 1]
+
+        # Compute metrics for the current fold
+        auc = roc_auc_score(y_test, y_pred_prob)
+        accuracy = accuracy_score(y_test, y_pred)
+        precision = precision_score(y_test, y_pred, zero_division=0)
+        recall = recall_score(y_test, y_pred)
+        f1 = f1_score(y_test, y_pred)
+
+        # Append scores
+        auc_scores.append(auc)
+        accuracy_scores.append(accuracy)
+        precision_scores.append(precision)
+        recall_scores.append(recall)
+        f1_scores.append(f1)
+
+        # Calculate mean scores
+        mean_auc = np.mean(auc_scores)
+        mean_acc = np.mean(accuracy_scores)
+        mean_prec = np.mean(precision_scores)
+        mean_rec = np.mean(recall_scores)
+        mean_f1 = np.mean(f1_scores)
+
+    # Calculate and print the mean of each metric
+    print(f'□ {k}-fold Cross Validation を用いた Logistic Regression with Standardization による2値分類の検定結果')
+    print('')
+    print(f'Mean AUC: {np.mean(auc_scores):.4f}')
+    print(f'Mean Accuracy: {np.mean(accuracy_scores):.4f}')
+    print(f'Mean Precision: {np.mean(precision_scores):.4f}')
+    print(f'Mean Recall: {np.mean(recall_scores):.4f}')
+    print(f'Mean F1 Score: {np.mean(f1_scores):.4f}')
+    print('')
+
+    # Average the feature importances over all folds
+    feature_importances /= k
+    # Get the feature names
+    feature_names = df.columns[:-1]
+    # Sort the features by importance
+    sorted_idx = np.argsort(feature_importances)[-10:]
+    sorted_importance = feature_importances[sorted_idx]
+    sorted_features = feature_names[sorted_idx]
+
+    # Export feature importances
+    feature_importances_df = pd.DataFrame({'Feature': feature_names, 'Importance': feature_importances})
+    # Sorting by absolute values for export
+    feature_importances_df['Abs_Importance'] = feature_importances_df['Importance'].abs()
+    feature_importances_df = feature_importances_df.sort_values(by='Abs_Importance', ascending=False).drop('Abs_Importance', axis=1)
+    excel_filename = os.path.join(path_out, 'feature_importances_logistic_standardized_kfold.xlsx')
+    feature_importances_df.to_excel(excel_filename, index=False)
+
+    print('')
+    print(f'◇ {k}-fold Cross Validation で得られた Logistic regression standardized における Feature Importance')
+    print('')
+    # Plot
+    plt.figure(figsize=(size_x, size_y))
+    plt.barh(sorted_features, sorted_importance, color='skyblue')
+    plt.xlabel('Average Feature Importance')
+    plt.title(f'Top 10 Feature Importances in {k}-fold CV of Logistic Regression standardized')
+    plt.show()
+
+    # Optionally retrain the model on the full dataset
+    model_full = LogisticRegression(random_state=random_state)
+    model_full.fit(X_standardized, y)
+
+    # Ensure the path exists
+    os.makedirs(path_model, exist_ok=True)
+    model_filename = os.path.join(path_model, 'kFCV_logistic_standardized.pkl')
+    # Save the full model
+    with open(model_filename, 'wb') as file:
+        pickle.dump(model_full, file)
+
+    res = np.array([mean_auc, mean_acc, mean_prec, mean_rec, mean_f1], dtype=object)
+    res2=pd.DataFrame([res], columns=['AUC','Accuracy','Precision','Recall','f1-score'], index=['Logistic Regression standardized'])
+
+    return res2
+    
 # SVM Normalized
 def SVMKFoldNormalized(k=k):
     from sklearn.svm import SVC
@@ -976,6 +1323,134 @@ def SVMKFoldNormalized(k=k):
 
     return res2
 
+# SVM Standardized
+def SVMKFoldStandardized(k=k):
+    from sklearn.svm import SVC
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.model_selection import KFold
+    import numpy as np
+    import pandas as pd
+
+    print('')
+    print('■ Support Vector Machine (standardized)')
+    print('')
+
+    # Assume df is your DataFrame loaded previously
+    # df = pd.read_csv(str(path_in))
+    X = df.iloc[:, :-1].values
+    y = df.iloc[:, -1].values
+
+    kernel_option = 'linear' if linear ==1 else 'rbf'
+
+    # Initialize StandardScaler
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+
+    # KFold cross-validation
+    kf = KFold(n_splits=k, shuffle=True, random_state=random_state)
+
+    # Initialize array to store feature importances for a linear kernel
+    feature_importances = np.zeros((X.shape[1],))
+
+    auc_scores, accuracy_scores, precision_scores, recall_scores, f1_scores = [], [], [], [], []
+
+    for train_index, test_index in kf.split(X_scaled):
+        X_train, X_test = X_scaled[train_index], X_scaled[test_index]
+        y_train, y_test = y[train_index], y[test_index]
+
+        # Initialize the SVM model
+        model = SVC(kernel = kernel_option, probability=True, random_state=random_state)
+        model.fit(X_train, y_train)
+
+        # Assuming a linear SVM, extract the coefficients
+        # For non-linear SVM, this part is not applicable
+        if isinstance(model, SVC) and model.kernel == 'linear':
+            feature_importances += np.abs(model.coef_[0])
+
+        # Predict classes and probabilities for evaluation
+        y_pred = model.predict(X_test)
+        y_pred_prob = model.predict_proba(X_test)[:, 1]
+
+        # Compute metrics for the current fold
+        auc = roc_auc_score(y_test, y_pred_prob)
+        accuracy = accuracy_score(y_test, y_pred)
+        precision = precision_score(y_test, y_pred, zero_division=0)
+        recall = recall_score(y_test, y_pred)
+        f1 = f1_score(y_test, y_pred)
+
+        # Append scores
+        auc_scores.append(auc)
+        accuracy_scores.append(accuracy)
+        precision_scores.append(precision)
+        recall_scores.append(recall)
+        f1_scores.append(f1)
+
+
+    # Calculate and print the mean of each metric
+    print(f'□ {k}-fold Cross Validation を用いた SVM with Standardization による2値分類の検定結果')
+    print(f'     The kernel used: {kernel_option}')
+    print('')
+    print(f'Mean AUC: {np.mean(auc_scores):.4f}')
+    print(f'Mean Accuracy: {np.mean(accuracy_scores):.4f}')
+    print(f'Mean Precision: {np.mean(precision_scores):.4f}')
+    print(f'Mean Recall: {np.mean(recall_scores):.4f}')
+    print(f'Mean F1 Score: {np.mean(f1_scores):.4f}')
+    print('')
+
+
+    # Feature importance for SVM can be calculated only when the kernel is linear.
+    if kernel_option == 'linear':
+        # Average the feature importances over all folds
+        feature_importances /= k
+        # Get the feature names
+        feature_names = df.columns[:-1]
+        # Sort the features by importance
+        sorted_idx = np.argsort(feature_importances)[-10:]
+        sorted_importance = feature_importances[sorted_idx]
+        sorted_features = feature_names[sorted_idx]
+
+        # Export feature importances
+        feature_importances_df = pd.DataFrame({'Feature': feature_names, 'Importance': feature_importances})
+        # Sorting by absolute values for export
+        feature_importances_df['Abs_Importance'] = feature_importances_df['Importance'].abs()
+        feature_importances_df = feature_importances_df.sort_values(by='Abs_Importance', ascending=False).drop('Abs_Importance', axis=1)
+        excel_filename = os.path.join(path_out, 'feature_importances_svm_standardized_kfold.xlsx')
+        feature_importances_df.to_excel(excel_filename, index=False)
+
+        print('')
+        print(f'◇ {k}-fold Cross Validation で得られた SVM standardized における Feature Importance')
+        print('')
+        # Plot
+        plt.figure(figsize=(size_x, size_y))
+        plt.barh(sorted_features, sorted_importance, color='skyblue')
+        plt.xlabel('Average Feature Importance')
+        plt.title(f'Top 10 Feature Importances in {k}-fold CV of SVM standardized using linear kernel')
+        plt.show()
+        print('')
+    else:
+        print('')
+        print('・ Feature importance cannot be figured out from SVM with NON-LINEAR kernel due to the kernel trick.')
+        print('')
+
+
+    # Initialize the SVM model with probability estimation enabled
+    model_full = SVC(kernel=kernel_option, probability=True, random_state=random_state)
+    # Fit the model to the full normalized dataset
+    model_full.fit(X_scaled, y)
+
+    # Ensure the path exists
+    os.makedirs(path_model, exist_ok=True)
+    model_filename = os.path.join(path_model, 'kFCV_svm_standardized.pkl')
+
+    # Save the full model
+    with open(model_filename, 'wb') as file:
+        pickle.dump(model_full, file)
+
+    res = np.array([np.mean(auc_scores), np.mean(accuracy_scores), np.mean(precision_scores), np.mean(recall_scores), np.mean(f1_scores)], dtype=object)
+    res2 = pd.DataFrame([res], columns=['AUC', 'Accuracy', 'Precision', 'Recall', 'f1-score'], index=['SVM standardized'])
+
+    return res2
+    
 # RandomForest
 def RandomForestKFold(k=k):
     from sklearn.ensemble import RandomForestClassifier
